@@ -1,0 +1,9 @@
+# Benchmark scenario - full speed for 10 seconds
+[scenario]
+name = "benchmark"
+total_duration = "10s"
+
+[[timeline]]
+at = "0s"
+rate = "full"
+error_rate = 1.0

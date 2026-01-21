@@ -1,0 +1,63 @@
+[package]
+name = "log-generator"
+version = "0.1.0"
+edition = "2021"
+description = "Hyper-optimized log generator capable of 1GB+/s throughput"
+license = "MIT"
+repository = "https://github.com/log-generator/log-generator"
+
+[dependencies]
+# Core performance - lock-free data structures and channels
+crossbeam = "0.8"
+parking_lot = "0.12"
+
+# Fast random number generation
+fastrand = "2.0"
+
+# Fast formatting (10-20x faster than std::fmt)
+itoa = "1.0"
+ryu = "1.0"
+
+# Memory management
+bumpalo = "3.14"
+bytes = "1.5"
+
+# Lock-free configuration swapping
+arc-swap = "1.6"
+
+# Memory-mapped files
+memmap2 = "0.9"
+
+# Configuration and serialization
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+
+# Signal handling
+ctrlc = "3.4"
+
+# HTTP client for endpoint output
+reqwest = { version = "0.11", features = ["blocking", "gzip"] }
+url = "2.5"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Linux-specific optimizations
+[target.'cfg(target_os = "linux")'.dependencies]
+core_affinity = "0.8"
+libc = "0.2"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+strip = false

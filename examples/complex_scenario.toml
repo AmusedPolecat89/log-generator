@@ -1,0 +1,58 @@
+# Complex scenario demonstrating rate changes and error spikes
+# Run: cargo run --release -- --scenario examples/complex_scenario.toml --output null --metrics
+
+[scenario]
+name = "production_simulation"
+total_duration = "2m"
+
+# Timeline-based rate control
+[[timeline]]
+at = "0s"
+rate = "low"
+error_rate = 0.5
+
+[[timeline]]
+at = "20s"
+rate = "ramp_to_full"
+duration = "10s"
+
+[[timeline]]
+at = "30s"
+rate = "full"
+error_rate = 1.0
+
+[[timeline]]
+at = "1m30s"
+rate = "medium"
+error_rate = 2.0
+
+# Error spikes
+[[spikes]]
+at = "40s"
+type = "error_burst"
+duration = "5s"
+error_rate = 50.0
+
+[[spikes]]
+at = "50s"
+type = "error_burst"
+duration = "3s"
+error_rate = 80.0
+
+[[spikes]]
+at = "1m"
+type = "error_burst"
+duration = "5s"
+error_rate = 40.0
+
+[[spikes]]
+at = "1m40s"
+type = "error_burst"
+duration = "8s"
+error_rate = 60.0
+
+# Custom rate presets
+[rates]
+low = { throughput_mb = 100, logs_per_sec = 500000 }
+medium = { throughput_mb = 500, logs_per_sec = 2500000 }
+full = { throughput_mb = 1000, logs_per_sec = 5000000 }

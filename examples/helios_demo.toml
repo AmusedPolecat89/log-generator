@@ -1,0 +1,43 @@
+# Helios Demo Scenario
+# Usage:
+#   ./target/release/log-generator \
+#     --scenario examples/helios_demo.toml \
+#     --format helios \
+#     --output "http://k8s-helios-helios-9c06c73d4f-1936970998.ap-southeast-2.elb.amazonaws.com/api/v1/ingest" \
+#     --http-auth "Bearer hel_5197083be19b9bcc35e449d714d261b5fe4a8992056b368017d0cd781a89f4f9" \
+#     --metrics
+
+[scenario]
+name = "helios_demo"
+total_duration = "5m"
+
+# Start with medium traffic
+[[timeline]]
+at = "0s"
+rate = "medium"
+error_rate = 1.0
+
+# Ramp up to full after 1 minute
+[[timeline]]
+at = "1m"
+rate = "full"
+error_rate = 1.5
+
+# Add error spikes at 2 and 3 minutes
+[[spikes]]
+at = "2m"
+type = "error_burst"
+duration = "10s"
+error_rate = 30.0
+
+[[spikes]]
+at = "3m"
+type = "error_burst"
+duration = "15s"
+error_rate = 50.0
+
+# Drop to low at 4 minutes
+[[timeline]]
+at = "4m"
+rate = "low"
+error_rate = 2.0
