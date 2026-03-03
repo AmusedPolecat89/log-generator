@@ -1,0 +1,41 @@
+# 1-hour scenario with periodic error spikes
+[scenario]
+name = "hour_long"
+total_duration = "1h"
+
+# Steady rate (overridden by --rate CLI flag)
+[[timeline]]
+at = "0s"
+rate = "medium"
+error_rate = 1.0
+
+# Error spikes every ~10 minutes
+[[spikes]]
+at = "10m"
+type = "error_burst"
+duration = "30s"
+error_rate = 30.0
+
+[[spikes]]
+at = "20m"
+type = "error_burst"
+duration = "20s"
+error_rate = 50.0
+
+[[spikes]]
+at = "30m"
+type = "latency_spike"
+duration = "45s"
+latency_multiplier = 5.0
+
+[[spikes]]
+at = "40m"
+type = "error_burst"
+duration = "30s"
+error_rate = 40.0
+
+[[spikes]]
+at = "50m"
+type = "mixed"
+duration = "60s"
+error_rate = 25.0

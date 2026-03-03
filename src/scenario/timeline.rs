@@ -138,12 +138,7 @@ impl TimelineState {
 
 /// Get a rate preset by name.
 fn get_preset<'a>(name: &str, presets: &'a RatePresets) -> &'a RatePreset {
-    match name {
-        "low" => &presets.low,
-        "medium" => &presets.medium,
-        "full" => &presets.full,
-        _ => &presets.medium, // Default to medium for unknown
-    }
+    presets.get(name).unwrap_or(&presets.medium)
 }
 
 /// Linear interpolation for u64.

@@ -1,0 +1,93 @@
+ To send logs from any external server to your Helios instance:                                                                                                   
+                                                                                                                                                                   
+  Endpoint                                                                                                                                                         
+                                                                               
+  POST https://test1.api.obsesc.com/api/v1/ingest                                                                                                                  
+                                                                                                                                                                   
+  Headers
+
+  Content-Type: application/json
+  Authorization: Bearer hel_798663737d67e037a66e921bfceb80a8c26d8ce64316bcdc12d73acef51b9236
+  Body format
+
+  {
+    "events": [
+      {
+        "timestamp": 1740300000,
+        "tags": {
+          "host": "web-01",
+          "service": "nginx",
+          "region": "us-east-1"
+        },
+        "metrics": {
+          "latency_ms": 42.5,
+          "status_code": 200,
+          "bytes_sent": 1024
+        },
+        "payload": "GET /api/users 200 42ms"
+      }
+    ]
+  }
+
+  - timestamp — Unix epoch seconds
+  - tags — string key-value pairs (dimensions you filter/group by)
+  - metrics — numeric key-value pairs (values you aggregate)
+  - payload — optional, free-text log line or JSON object
+
+  Example: curl
+
+  curl -X POST https://test1.api.obsesc.com/api/v1/ingest \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer hlx_c9e3365d051b8f4389ead1d0ad6a4a893bcaa6571fb17ae9b8534036d2476f08" \
+    -d '{
+      "events": [
+        {
+          "timestamp": '"$(date +%s)"',
+          "tags": {"host": "'"$(hostname)"'", "service": "myapp"},
+          "metrics": {"latency_ms": 15.2, "error_rate": 0.01},
+          "payload": "Application started successfully"
+        }
+      ]
+    }'
+
+  Example: batch (multiple events)
+
+  curl -X POST https://test1.api.obsesc.com/api/v1/ingest \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer hlx_c9e3365d051b8f4389ead1d0ad6a4a893bcaa6571fb17ae9b8534036d2476f08" \
+    -d '{
+      "events": [
+        {"timestamp": '"$(date +%s)"', "tags": {"host": "web-01", "level": "info"}, "metrics": {"latency_ms": 12}, "payload": "Request handled"},
+        {"timestamp": '"$(date +%s)"', "tags": {"host": "web-01", "level": "error"}, "metrics": {"latency_ms": 500}, "payload": "Timeout connecting to DB"},
+        {"timestamp": '"$(date +%s)"', "tags": {"host": "web-02", "level": "info"}, "metrics": {"latency_ms": 8}, "payload": "Health check OK"}
+      ]
+    }'
+
+  Example: continuous log shipper (bash loop)
+
+  #!/bin/bash
+  ENDPOINT="https://test1.api.obsesc.com/api/v1/ingest"
+  KEY="hlx_c9e3365d051b8f4389ead1d0ad6a4a893bcaa6571fb17ae9b8534036d2476f08"
+  HOST=$(hostname)
+
+  while true; do
+    LOAD=$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo "0")
+    MEM=$(free -m 2>/dev/null | awk '/Mem:/{printf "%.1f", $3/$2*100}' || echo "0")
+
+    curl -s -X POST "$ENDPOINT" \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $KEY" \
+      -d '{
+        "events": [{
+          "timestamp": '"$(date +%s)"',
+          "tags": {"host": "'"$HOST"'", "service": "system"},
+          "metrics": {"load_1m": '"$LOAD"', "memory_pct": '"$MEM"'}
+        }]
+      }'
+
+    sleep 60
+  done
+
+  Response
+
+  {"accepted": 3, "rejected": 0, "latency_us": 142}

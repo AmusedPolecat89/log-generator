@@ -4,6 +4,7 @@
 
 pub mod file;
 pub mod http;
+pub mod http_concurrent;
 pub mod metrics;
 pub mod null;
 
@@ -53,7 +54,7 @@ pub fn create_writer(config: &OutputConfig) -> io::Result<Box<dyn OutputWriter>>
             Ok(Box::new(writer))
         }
         OutputConfig::Http(http_config) => {
-            let writer = http::HttpWriter::new(http_config.clone())?;
+            let writer = http_concurrent::ConcurrentHttpWriter::new(http_config.clone())?;
             Ok(Box::new(writer))
         }
     }

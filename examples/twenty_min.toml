@@ -1,0 +1,27 @@
+# 20-minute scenario with error spikes
+[scenario]
+name = "twenty_min"
+total_duration = "20m"
+
+[[timeline]]
+at = "0s"
+rate = "medium"
+error_rate = 1.0
+
+[[spikes]]
+at = "5m"
+type = "error_burst"
+duration = "20s"
+error_rate = 35.0
+
+[[spikes]]
+at = "12m"
+type = "error_burst"
+duration = "30s"
+error_rate = 50.0
+
+[[spikes]]
+at = "17m"
+type = "latency_spike"
+duration = "20s"
+latency_multiplier = 5.0

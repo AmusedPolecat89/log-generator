@@ -169,23 +169,50 @@ pub struct RepeatConfig {
 /// Rate presets configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RatePresets {
+    /// Trickle rate preset
+    #[serde(default = "RatePreset::default_trickle")]
+    pub trickle: RatePreset,
     /// Low rate preset
     #[serde(default = "RatePreset::default_low")]
     pub low: RatePreset,
     /// Medium rate preset
     #[serde(default = "RatePreset::default_medium")]
     pub medium: RatePreset,
+    /// High rate preset
+    #[serde(default = "RatePreset::default_high")]
+    pub high: RatePreset,
     /// Full rate preset
     #[serde(default = "RatePreset::default_full")]
     pub full: RatePreset,
+    /// Max rate preset
+    #[serde(default = "RatePreset::default_max")]
+    pub max: RatePreset,
 }
 
 impl Default for RatePresets {
     fn default() -> Self {
         Self {
+            trickle: RatePreset::default_trickle(),
             low: RatePreset::default_low(),
             medium: RatePreset::default_medium(),
+            high: RatePreset::default_high(),
             full: RatePreset::default_full(),
+            max: RatePreset::default_max(),
+        }
+    }
+}
+
+impl RatePresets {
+    /// Look up a preset by name.
+    pub fn get(&self, name: &str) -> Option<&RatePreset> {
+        match name {
+            "trickle" => Some(&self.trickle),
+            "low" => Some(&self.low),
+            "medium" => Some(&self.medium),
+            "high" => Some(&self.high),
+            "full" => Some(&self.full),
+            "max" => Some(&self.max),
+            _ => None,
         }
     }
 }
@@ -200,6 +227,13 @@ pub struct RatePreset {
 }
 
 impl RatePreset {
+    pub fn default_trickle() -> Self {
+        Self {
+            throughput_mb: 10,
+            logs_per_sec: 50_000,
+        }
+    }
+
     pub fn default_low() -> Self {
         Self {
             throughput_mb: 100,
@@ -214,10 +248,34 @@ impl RatePreset {
         }
     }
 
+    pub fn default_high() -> Self {
+        Self {
+            throughput_mb: 750,
+            logs_per_sec: 3_750_000,
+        }
+    }
+
     pub fn default_full() -> Self {
         Self {
             throughput_mb: 1000,
             logs_per_sec: 5_000_000,
+        }
+    }
+
+    pub fn default_max() -> Self {
+        Self {
+            throughput_mb: 2000,
+            logs_per_sec: 10_000_000,
+        }
+    }
+
+    /// Create a preset from a custom logs-per-second value.
+    /// Throughput is estimated assuming ~200 bytes per log line.
+    pub fn from_logs_per_sec(lps: u64) -> Self {
+        let throughput_mb = ((lps as f64 * 200.0) / (1024.0 * 1024.0)).ceil() as u32;
+        Self {
+            throughput_mb,
+            logs_per_sec: lps,
         }
     }
 }

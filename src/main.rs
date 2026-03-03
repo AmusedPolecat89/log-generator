@@ -5,7 +5,9 @@
 //!   log-generator --scenario scenario.toml --output null --metrics
 
 use clap::Parser;
-use log_generator::config::scenario::Scenario;
+use log_generator::config::scenario::{
+    RatePreset, RatePresets, RateSetting, Scenario, TimelineEvent,
+};
 use log_generator::generator::engine::Engine;
 use log_generator::output::{HttpBatchFormat, HttpConfig, OutputConfig};
 use log_generator::templates::LogFormat;
@@ -40,6 +42,14 @@ struct Args {
     #[arg(long)]
     http_auth: Option<String>,
 
+    /// Custom HTTP header (repeatable, format: "Name: Value")
+    #[arg(long = "http-header", value_name = "NAME:VALUE")]
+    http_headers: Vec<String>,
+
+    /// Number of concurrent HTTP sender threads (default: 4)
+    #[arg(long, default_value = "4")]
+    http_senders: usize,
+
     /// Override log format: apache, nginx, json, syslog
     #[arg(short, long)]
     format: Option<String>,
@@ -51,6 +61,11 @@ struct Args {
     /// Show real-time throughput metrics
     #[arg(short, long)]
     metrics: bool,
+
+    /// Override rate: preset name (trickle, low, medium, high, full, max)
+    /// or numeric logs/sec with optional K/M suffix (e.g., 1000000, 500K, 1M)
+    #[arg(short, long)]
+    rate: Option<String>,
 
     /// Verbose output
     #[arg(short, long)]
@@ -92,6 +107,17 @@ fn main() {
         });
     }
 
+    // Override rate if specified
+    if let Some(rate_str) = &args.rate {
+        let rate_setting = parse_rate_setting(rate_str, &scenario.rates);
+        scenario.timeline = vec![TimelineEvent {
+            at: Duration::ZERO,
+            rate: rate_setting,
+            duration: None,
+            error_rate: None,
+        }];
+    }
+
     // Determine if using Helios format
     let is_helios = scenario.format == Some(LogFormat::Helios);
 
@@ -102,10 +128,20 @@ fn main() {
         url if url.starts_with("http://") || url.starts_with("https://") => {
             let mut http_config = HttpConfig::new(url)
                 .with_batch_size(args.http_batch_kb * 1024)
-                .with_timeout(Duration::from_secs(args.http_timeout));
+                .with_timeout(Duration::from_secs(args.http_timeout))
+                .with_num_senders(args.http_senders);
 
             if let Some(auth) = &args.http_auth {
                 http_config = http_config.with_auth(auth);
+            }
+
+            for header in &args.http_headers {
+                if let Some((name, value)) = header.split_once(':') {
+                    http_config = http_config.with_header(name.trim(), value.trim());
+                } else {
+                    eprintln!("Invalid header format '{}'. Use: 'Name: Value'", header);
+                    process::exit(1);
+                }
             }
 
             // Auto-configure for Helios API when using helios format
@@ -153,4 +189,42 @@ fn get_num_cpus() -> usize {
     std::thread::available_parallelism()
         .map(|p| p.get())
         .unwrap_or(4)
+}
+
+/// Parse a --rate value into a RateSetting.
+/// Accepts preset names (trickle, low, medium, high, full, max) or numeric
+/// values with optional K/M suffix (e.g., 1000000, 500K, 1M).
+fn parse_rate_setting(s: &str, presets: &RatePresets) -> RateSetting {
+    // Check if it's a known preset name
+    if presets.get(s).is_some() {
+        return RateSetting::Preset(s.to_string());
+    }
+
+    // Try to parse as numeric (with optional K/M suffix)
+    let s_upper = s.to_uppercase();
+    let (num_str, multiplier) = if let Some(n) = s_upper.strip_suffix('M') {
+        (n, 1_000_000u64)
+    } else if let Some(n) = s_upper.strip_suffix('K') {
+        (n, 1_000u64)
+    } else {
+        (s_upper.as_str(), 1u64)
+    };
+
+    match num_str.parse::<u64>() {
+        Ok(n) => {
+            let lps = n * multiplier;
+            let preset = RatePreset::from_logs_per_sec(lps);
+            RateSetting::Explicit {
+                throughput_mb: preset.throughput_mb,
+                logs_per_sec: preset.logs_per_sec,
+            }
+        }
+        Err(_) => {
+            eprintln!(
+                "Unknown rate '{}'. Use a preset (trickle, low, medium, high, full, max) or a number with optional K/M suffix.",
+                s
+            );
+            process::exit(1);
+        }
+    }
 }

@@ -42,6 +42,10 @@ pub struct HttpConfig {
     pub gzip: bool,
     /// Batch format wrapper
     pub batch_format: HttpBatchFormat,
+    /// Number of concurrent sender threads for HTTP output
+    pub num_senders: usize,
+    /// Extra custom headers (name, value)
+    pub custom_headers: Vec<(String, String)>,
 }
 
 impl Default for HttpConfig {
@@ -55,6 +59,8 @@ impl Default for HttpConfig {
             auth_header: None,
             gzip: true,
             batch_format: HttpBatchFormat::Raw,
+            num_senders: 4,
+            custom_headers: Vec::new(),
         }
     }
 }
@@ -104,6 +110,18 @@ impl HttpConfig {
         self
     }
 
+    /// Add a custom header.
+    pub fn with_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.custom_headers.push((name.into(), value.into()));
+        self
+    }
+
+    /// Set the number of concurrent sender threads.
+    pub fn with_num_senders(mut self, n: usize) -> Self {
+        self.num_senders = n;
+        self
+    }
+
     /// Configure for Helios API endpoint.
     pub fn for_helios(mut self) -> Self {
         self.batch_format = HttpBatchFormat::Helios;
@@ -136,6 +154,15 @@ impl HttpWriter {
             headers.insert(
                 "Authorization",
                 HeaderValue::from_str(auth)
+                    .map_err(|e| Error::new(ErrorKind::InvalidInput, e))?,
+            );
+        }
+
+        for (name, value) in &config.custom_headers {
+            headers.insert(
+                reqwest::header::HeaderName::from_bytes(name.as_bytes())
+                    .map_err(|e| Error::new(ErrorKind::InvalidInput, e))?,
+                HeaderValue::from_str(value)
                     .map_err(|e| Error::new(ErrorKind::InvalidInput, e))?,
             );
         }
