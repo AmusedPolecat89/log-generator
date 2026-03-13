@@ -22,9 +22,13 @@ use std::time::Duration;
 #[command(about = "Hyper-optimized log generator capable of 1GB+/s throughput")]
 #[command(version)]
 struct Args {
+    /// Run as HTTP daemon on this port (e.g. --daemon 9090)
+    #[arg(long)]
+    daemon: Option<u16>,
+
     /// Scenario script file (TOML format)
-    #[arg(short, long)]
-    scenario: PathBuf,
+    #[arg(short, long, required_unless_present = "daemon")]
+    scenario: Option<PathBuf>,
 
     /// Output destination: file path, "stdout", "null", or HTTP URL (http://...)
     #[arg(short, long, default_value = "stdout")]
@@ -46,9 +50,13 @@ struct Args {
     #[arg(long = "http-header", value_name = "NAME:VALUE")]
     http_headers: Vec<String>,
 
-    /// Number of concurrent HTTP sender threads (default: 4)
-    #[arg(long, default_value = "4")]
+    /// Number of concurrent HTTP sender threads (default: 8)
+    #[arg(long, default_value = "8")]
     http_senders: usize,
+
+    /// HTTP send queue size (0 = auto = num_senders * 8)
+    #[arg(long, default_value = "0")]
+    http_queue_size: usize,
 
     /// Override log format: apache, nginx, json, syslog
     #[arg(short, long)]
@@ -75,8 +83,16 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
+    // Daemon mode
+    if let Some(port) = args.daemon {
+        log_generator::daemon::run_daemon(port);
+        return;
+    }
+
+    let scenario_path = args.scenario.expect("scenario required when not in daemon mode");
+
     // Load scenario
-    let scenario_content = match std::fs::read_to_string(&args.scenario) {
+    let scenario_content = match std::fs::read_to_string(&scenario_path) {
         Ok(content) => content,
         Err(e) => {
             eprintln!("Error reading scenario file: {}", e);
@@ -129,7 +145,8 @@ fn main() {
             let mut http_config = HttpConfig::new(url)
                 .with_batch_size(args.http_batch_kb * 1024)
                 .with_timeout(Duration::from_secs(args.http_timeout))
-                .with_num_senders(args.http_senders);
+                .with_num_senders(args.http_senders)
+                .with_send_queue_size(args.http_queue_size);
 
             if let Some(auth) = &args.http_auth {
                 http_config = http_config.with_auth(auth);
@@ -144,10 +161,14 @@ fn main() {
                 }
             }
 
-            // Auto-configure for Helios API when using helios format
+            // Auto-configure batch format based on log format
             if is_helios {
                 http_config = http_config
                     .with_batch_format(HttpBatchFormat::Helios)
+                    .with_content_type("application/json");
+            } else if scenario.format == Some(LogFormat::Json) {
+                http_config = http_config
+                    .with_batch_format(HttpBatchFormat::JsonArray)
                     .with_content_type("application/json");
             }
 
@@ -170,7 +191,7 @@ fn main() {
 
     if args.verbose {
         eprintln!("Starting log generator:");
-        eprintln!("  Scenario: {}", args.scenario.display());
+        eprintln!("  Scenario: {}", scenario_path.display());
         eprintln!("  Output: {}", args.output);
         eprintln!("  Format: {:?}", scenario.format.unwrap_or(LogFormat::Apache));
         eprintln!("  Threads: {}", num_threads);

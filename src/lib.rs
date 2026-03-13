@@ -8,6 +8,7 @@
 
 pub mod anomaly;
 pub mod config;
+pub mod daemon;
 pub mod fields;
 pub mod generator;
 pub mod output;

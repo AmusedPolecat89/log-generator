@@ -1,0 +1,8 @@
+# Flat 100 MB/s for 15 minutes
+[scenario]
+name = "flat_100mb_15min"
+total_duration = "15m"
+
+[[timeline]]
+at = "0s"
+rate = { throughput_mb = 100, logs_per_sec = 300000 }

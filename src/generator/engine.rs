@@ -9,7 +9,7 @@ use crate::output::metrics::{MetricsCounters, MetricsDisplay};
 use crate::output::{create_writer, OutputConfig};
 use crate::scenario::executor::ScenarioExecutor;
 use crate::templates::LogFormat;
-use crossbeam::channel::bounded;
+use crossbeam::channel::{bounded, TryRecvError};
 use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -118,17 +118,36 @@ impl Engine {
                 }
             }
 
-            // Try to receive batches (non-blocking to allow ticking)
-            match rx.recv_timeout(Duration::from_millis(1)) {
-                Ok(batch) => {
-                    writer.write_batch(&batch.data)?;
+            // Drain all available batches from the channel
+            let mut drained = false;
+            let mut disconnected = false;
+            loop {
+                match rx.try_recv() {
+                    Ok(batch) => {
+                        writer.write_batch(&batch.data)?;
+                        drained = true;
+                    }
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => {
+                        disconnected = true;
+                        break;
+                    }
                 }
-                Err(crossbeam::channel::RecvTimeoutError::Timeout) => {
-                    // No data available, continue
-                }
-                Err(crossbeam::channel::RecvTimeoutError::Disconnected) => {
-                    // All workers finished
-                    break;
+            }
+            if disconnected {
+                break;
+            }
+
+            // Only block-wait if nothing was drained (avoids busy-spin)
+            if !drained {
+                match rx.recv_timeout(Duration::from_millis(1)) {
+                    Ok(batch) => {
+                        writer.write_batch(&batch.data)?;
+                    }
+                    Err(crossbeam::channel::RecvTimeoutError::Timeout) => {}
+                    Err(crossbeam::channel::RecvTimeoutError::Disconnected) => {
+                        break;
+                    }
                 }
             }
 

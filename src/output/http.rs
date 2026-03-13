@@ -13,6 +13,8 @@ use std::time::Duration;
 pub enum HttpBatchFormat {
     /// Raw data, newline-delimited (default)
     Raw,
+    /// JSON array: [{...},{...}]
+    JsonArray,
     /// Helios format: {"events":[...]}
     Helios,
 }
@@ -46,6 +48,10 @@ pub struct HttpConfig {
     pub num_senders: usize,
     /// Extra custom headers (name, value)
     pub custom_headers: Vec<(String, String)>,
+    /// Max idle connections per host (0 = auto-match num_senders)
+    pub pool_idle_per_host: usize,
+    /// Send queue size (0 = auto = num_senders * 8)
+    pub send_queue_size: usize,
 }
 
 impl Default for HttpConfig {
@@ -59,8 +65,10 @@ impl Default for HttpConfig {
             auth_header: None,
             gzip: true,
             batch_format: HttpBatchFormat::Raw,
-            num_senders: 4,
+            num_senders: 8,
             custom_headers: Vec::new(),
+            pool_idle_per_host: 0,
+            send_queue_size: 0,
         }
     }
 }
@@ -128,6 +136,36 @@ impl HttpConfig {
         self.content_type = "application/json".to_string();
         self
     }
+
+    /// Set the pool idle connections per host (0 = auto-match num_senders).
+    pub fn with_pool_idle_per_host(mut self, n: usize) -> Self {
+        self.pool_idle_per_host = n;
+        self
+    }
+
+    /// Set the send queue size (0 = auto = num_senders * 8).
+    pub fn with_send_queue_size(mut self, n: usize) -> Self {
+        self.send_queue_size = n;
+        self
+    }
+
+    /// Returns effective pool idle per host: configured value, or num_senders if auto (0).
+    pub fn effective_pool_idle(&self) -> usize {
+        if self.pool_idle_per_host > 0 {
+            self.pool_idle_per_host
+        } else {
+            self.num_senders
+        }
+    }
+
+    /// Returns effective send queue size: configured value, or num_senders * 8 if auto (0).
+    pub fn effective_send_queue_size(&self) -> usize {
+        if self.send_queue_size > 0 {
+            self.send_queue_size
+        } else {
+            self.num_senders * 8
+        }
+    }
 }
 
 /// HTTP output writer that sends log batches to an endpoint.
@@ -171,7 +209,7 @@ impl HttpWriter {
             .timeout(config.timeout)
             .default_headers(headers)
             .gzip(config.gzip)
-            .pool_max_idle_per_host(4)
+            .pool_max_idle_per_host(config.effective_pool_idle())
             .build()
             .map_err(|e| Error::new(ErrorKind::Other, e))?;
 
@@ -200,6 +238,25 @@ impl HttpWriter {
         let payload = match self.config.batch_format {
             HttpBatchFormat::Raw => {
                 std::mem::take(&mut self.buffer)
+            }
+            HttpBatchFormat::JsonArray => {
+                // Wrap newline-delimited JSON objects in a JSON array: [{...},{...}]
+                let mut data = std::mem::take(&mut self.buffer);
+                // Remove trailing newline
+                while data.last() == Some(&b'\n') {
+                    data.pop();
+                }
+                // Replace remaining newlines with commas
+                for byte in data.iter_mut() {
+                    if *byte == b'\n' {
+                        *byte = b',';
+                    }
+                }
+                let mut payload = Vec::with_capacity(data.len() + 2);
+                payload.push(b'[');
+                payload.extend_from_slice(&data);
+                payload.push(b']');
+                payload
             }
             HttpBatchFormat::Helios => {
                 // Wrap events in {"events":[...]} format
@@ -254,6 +311,21 @@ impl HttpWriter {
         // Restore buffer for retry later (unwrapped)
         self.buffer = match self.config.batch_format {
             HttpBatchFormat::Raw => payload,
+            HttpBatchFormat::JsonArray => {
+                // Extract from [...]  -> restore newline-delimited
+                if payload.len() > 2 {
+                    let mut restored = payload[1..payload.len() - 1].to_vec();
+                    for byte in restored.iter_mut() {
+                        if *byte == b',' {
+                            *byte = b'\n';
+                        }
+                    }
+                    restored.push(b'\n');
+                    restored
+                } else {
+                    Vec::new()
+                }
+            }
             HttpBatchFormat::Helios => {
                 // Extract events from payload for retry
                 if payload.len() > 13 {

@@ -1,0 +1,34 @@
+# Ramp stress test: 10 MB/s -> 400 MB/s over 2.5 minutes, then hold steady
+[scenario]
+name = "ramp_stress"
+total_duration = "10m"
+
+# Start gentle: 10 MB/s
+[[timeline]]
+at = "0s"
+rate = { throughput_mb = 10, logs_per_sec = 30000 }
+
+# 30s: 50 MB/s
+[[timeline]]
+at = "30s"
+rate = { throughput_mb = 50, logs_per_sec = 150000 }
+
+# 60s: 100 MB/s
+[[timeline]]
+at = "60s"
+rate = { throughput_mb = 100, logs_per_sec = 300000 }
+
+# 90s: 200 MB/s
+[[timeline]]
+at = "90s"
+rate = { throughput_mb = 200, logs_per_sec = 600000 }
+
+# 120s: 300 MB/s
+[[timeline]]
+at = "120s"
+rate = { throughput_mb = 300, logs_per_sec = 900000 }
+
+# 150s: 400 MB/s - hold steady for remaining 7.5 minutes
+[[timeline]]
+at = "150s"
+rate = { throughput_mb = 400, logs_per_sec = 1200000 }
