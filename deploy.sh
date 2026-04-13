@@ -54,7 +54,8 @@ echo "    Done."
 echo "--- Starting daemon on port $DAEMON_PORT..."
 ssh_cmd "pkill -f 'log-generator --daemon' 2>/dev/null || true"
 sleep 1
-ssh_cmd "bash -c 'cd $REMOTE_DIR && nohup ./target/release/log-generator --daemon $DAEMON_PORT > /tmp/daemon.log 2>&1 </dev/null & disown'"
+ssh -n $SSH_OPTS "$REMOTE_USER@$INSTANCE_IP" \
+    "cd $REMOTE_DIR && setsid -f ./target/release/log-generator --daemon $DAEMON_PORT > /tmp/daemon.log 2>&1 < /dev/null"
 sleep 2
 
 STATUS=$(ssh_cmd "curl -s http://localhost:$DAEMON_PORT/status" 2>/dev/null || echo "FAILED")
