@@ -52,7 +52,7 @@ echo "    Done."
 
 # --- 5. Stop any existing daemon, then start fresh ---
 echo "--- Starting daemon on port $DAEMON_PORT..."
-ssh_cmd "pkill -f 'log-generator --daemon' 2>/dev/null || true"
+ssh_cmd "pkill -x log-generator 2>/dev/null || true"
 sleep 1
 ssh -n $SSH_OPTS "$REMOTE_USER@$INSTANCE_IP" \
     "cd $REMOTE_DIR && setsid -f ./target/release/log-generator --daemon $DAEMON_PORT > /tmp/daemon.log 2>&1 < /dev/null"
